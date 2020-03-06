@@ -3,7 +3,7 @@ from __future__ import absolute_import, division, print_function
 import os
 from . import Env
 from .SCLang import *
-from ..ServerManager import DefaultServer
+from ..ServerManager import Server
 from ..Settings import SYNTHDEF_DIR
 
 # Container for SynthDefs
@@ -20,7 +20,9 @@ class SynthDict(dict):
     def __call__(self, name):
         return self[name]
     def reload(self):
-        reload(self.module)
+        for key, item in self.items():
+            item.load()
+        return
     def set_server(self, serv):
         self.server = serv
         self.server.synthdefs = self
@@ -34,7 +36,7 @@ SynthDefs = SynthDict()
 
 class SynthDefBaseClass(object):
 
-    server = DefaultServer
+    server = Server
     bus_name = 'bus'
     var = ['osc', 'env']
     defaults = {}
@@ -248,9 +250,9 @@ class SynthDefBaseClass(object):
         except:
             return False
 
-    def _load_synth(self):
-        self.write()
-        SynthDef.server.loadSynthDef(self.filename)
+    def load(self):
+        """ Load in server"""
+        return SynthDef.server.loadSynthDef(self.filename)
 
     def add(self):
         """ This is required to add the SynthDef to the SuperCollider Server """
@@ -264,7 +266,10 @@ class SynthDefBaseClass(object):
             self.synth_added = True
 
             # Load to server
-            self._load_synth()
+            
+            self.write()
+
+            self.load()
 
         except Exception as e:
 
@@ -360,7 +365,10 @@ class CompiledSynthDef(SynthDefBaseClass):
         super(CompiledSynthDef, self).__init__(name)
         self.filename = filename
 
-    def _load_synth(self):
+    def write(self):
+        return
+
+    def load(self):
         SynthDef.server.loadCompiled(self.filename)
 
     def __str__(self):

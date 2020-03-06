@@ -12,9 +12,9 @@ filename = os.path.join(os.path.dirname(__file__), "conf.txt")
 try:
     
     with open(filename) as f:
-        for line in f.readlines():
-            if not line[0] == "#" and line.strip() != "":
-                code = compile(line.strip(), "FoxDot", "exec")
+        for line in (l.strip() for l in f.readlines()):
+            if line and not line.startswith("#"):
+                code = compile(line, "FoxDot", "exec")
                 exec(code, globals())
 
 except FileNotFoundError:
@@ -27,18 +27,22 @@ except FileNotFoundError:
     FONT='Consolas'
     SUPERCOLLIDER=""
     BOOT_ON_STARTUP=False
+    CHECK_FOR_UPDATE=True
     SC3_PLUGINS=False
     MAX_CHANNELS=2
     SAMPLES_DIR=""
     GET_SC_INFO=True
-    USE_ALPHA=False
+    USE_ALPHA=True
     ALPHA_VALUE=0.8
     MENU_ON_STARTUP=True
     TRANSPARENT_ON_STARTUP=False
     RECOVER_WORK=True
     LINE_NUMBER_MARKER_OFFSET=0
+    AUTO_COMPLETE_BRACKETS=True
     CPU_USAGE=2 # 0=low, 1=medium, 2=high
-    CLOCK_LATENCY=0 #0=low, 1=medium, 2=high
+    CLOCK_LATENCY=0 # 0=low, 1=medium, 2=high
+    FORWARD_ADDRESS=''
+    FORWARD_PORT=0
 
     # Text colours
     # ------------------

@@ -1,9 +1,6 @@
 from __future__ import absolute_import, division, print_function
 
-try:
-    from Tkinter import Menu, BooleanVar, IntVar, DISABLED
-except ImportError:
-    from tkinter import Menu, BooleanVar, IntVar, DISABLED
+from .tkimport import Menu, BooleanVar, IntVar, DISABLED
 
 import os.path
 from functools import partial
@@ -59,6 +56,7 @@ class MenuBar(Menu):
         editmenu.add_command(label="Export Console Log",     command=self.root.export_console)
         editmenu.add_command(label="Toggle Console",         command=self.root.toggle_console)
         editmenu.add_separator()
+        editmenu.add_checkbutton(label="Toggle Fullscreen",      command=(lambda: self.root.toggle_true_fullscreen(zoom=True)), variable=self.root.true_fullscreen_toggled)
         editmenu.add_command(label="Toggle Menu",            command=self.root.toggle_menu, accelerator="Ctrl+M")
         editmenu.add_checkbutton(label="Toggle Window Transparency",  command=self.root.toggle_transparency, variable=self.root.transparent)
         editmenu.add_checkbutton(label="Toggle Auto-fill Prompt",     command=self.root.toggle_prompt,       variable=self.root.show_prompt)
@@ -106,14 +104,18 @@ class MenuBar(Menu):
 
         for tutorial in GET_TUTORIAL_FILES():
 
-            filename = os.path.basename(tutorial).replace(".py", "")
+            filename = os.path.basename(tutorial)
 
-            data = filename.split("_")
+            if filename.endswith(".py"):
 
-            num  = data[0]
-            name = " ".join(data[1:]).title()
+                filename = filename.replace(".py", "")
 
-            tutorialmenu.add_command(label="Load Tutorial {}: {}".format(num, name), command=partial(self.root.loadfile, tutorial))
+                data = filename.split("_")
+
+                num  = data[0]
+                name = " ".join(data[1:]).title()
+
+                tutorialmenu.add_command(label="Load Tutorial {}: {}".format(num, name), command=partial(self.root.loadfile, tutorial))
 
         self.add_cascade(label="Tutorials", menu=tutorialmenu)
 

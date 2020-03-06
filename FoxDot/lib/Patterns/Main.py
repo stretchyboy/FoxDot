@@ -119,10 +119,27 @@ class metaPattern(object):
         """ Returns a new pattern object with this Pattern's class type """
         return self.__class__(data + self.meta)
 
+    def transform(self, func):
+        return self.__class__([(item.transform(func) if isinstance(item, metaPattern) else func(item))for item in self])
+
+    def int(self):
+        return self.transform(int)
+
+    def float(self):
+        return self.transform(float)
+
+    def str(self):
+        return self.transform(str)
+
     @classmethod
     def get_methods(cls):
         """ Returns the methods associated with the `Pattern` class as a list """
         return [attr for attr in dir(cls) if callable(getattr(cls, attr))]
+
+    def get_data(self):
+        """ Returns self.data if data is not a single instance of this class, in which 
+            case self.data[0].data is returned """
+        return self.data
 
     @classmethod
     def help(cls):
@@ -652,11 +669,14 @@ class metaPattern(object):
         return new
 
     @loop_pattern_method
-    def loop(self, n):
+    def loop(self, n, f=None):
         """ Repeats this pattern n times """
-        new = []
-        for i in range(n):
-            new += list(self)
+        assert n > 0, ".loop() parameter must be greater than 0"
+        new = values = list(self)
+        for i in range(n - 1):
+            if callable(f):
+                values = [f(x) for x in values]
+            new += list(values)
         return self.new(new)
 
     @loop_pattern_method
@@ -780,10 +800,25 @@ class metaPattern(object):
         new = []
         for item in self.data:
             if isinstance(item, metaPattern):
-                new.append(item.map(mapping))
+                new.append(item.submap(mapping))
             else:
-                new.append(mapping.get(item, 0))
+                new.append(mapping.get(item, item))
         return self.new(new)
+
+    def compress(self, selector):
+        """ Removes values from the pattern if the same index in selector is 0. 
+            Similar to .select() but maximum length of the new Pattern is the 
+            length of the initial Pattern.  """
+        s = asStream(selector)
+        return self.new([self[i] for i in range(len(self)) if s[i]])
+
+    def select(self, selector):
+        """ Removes values from the pattern if the same index in selector is 0  """
+        s = asStream(selector)
+        # Don't do anything if all values are 1
+        if all([value == 1 for value in s]):
+            return self
+        return self.new([self[i] for i in range(LCM(len(self), len(s))) if s[i]])    
 
     def layer(self, method, *args, **kwargs):
         """ Zips a pattern with a modified version of itself. Method argument
@@ -1069,6 +1104,24 @@ class PGroup(metaPattern):
                 values.append(item)
         return PGroup(values)
 
+    def concat(self, data):
+        """ Concatonates this patterns stream with another """
+        new = PGroup()
+        if isinstance(data, PGroup):
+            new.data = self.data + data.data
+        # Creates a pattern
+        elif isinstance(data, Pattern):
+            args = list(self.data)
+            args.append(data)
+            new = PGroup(*args)
+        elif isinstance(data, (list, str)):
+            new.data = list(self.data)
+            new.data.extend(map(convert_nested_data, data))
+        else:
+            new.data = list(self.data)
+            new.append(data)
+        return new
+
     def _get_step(self, dur):
         return dur
 
@@ -1300,6 +1353,17 @@ class GeneratorPattern:
     def func(self, index):
         return index
 
+    @staticmethod
+    def from_func(pattern_generator_func):
+        """ Create a generator which invokes a given function
+            to generate items. The given function should take
+            and integer argument and return a pattern item. """
+        class CustomGeneratorPattern(GeneratorPattern):
+            def func(self, index):
+                return pattern_generator_func(index)
+        return CustomGeneratorPattern()
+
+
     def __int__(self):  
         return int(self.getitem())
 
@@ -1444,10 +1508,15 @@ Format = PatternFormat ## TODO - Remove this
 
 def convert_nested_data(data):
     """ Converts a piece of data in a pattern to a PGroup/Pattern as appropriate """
+    from ..Constants import NoneConst
 
     if isinstance(data, (int, float)):
 
         return data
+
+    elif data == None:
+
+        return NoneConst()
 
     elif type(data) is tuple:
         
@@ -1547,3 +1616,16 @@ def sum_delays(a, b):
         value = a + b
 
     return value if len(value) > 1 else value[0]
+
+
+def force_pattern_args(f):
+    """ Wrapper for forcing arguments to be a Pattern """
+    def new_func(*args, **kwargs):
+        new_args = tuple(x if isinstance(x, metaPattern) else PGroup(x) for x in args)
+        new_kwargs = {
+            key: value if isinstance(value, metaPattern)
+            else value 
+            for key, value in kwargs.items()
+        }
+        return f(*new_args, **new_kwargs)
+    return new_func

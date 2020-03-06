@@ -1,11 +1,6 @@
 from __future__ import absolute_import, division, print_function
 
-try:
-    from Tkinter import *
-    import tkFont
-except ImportError:
-    from tkinter import *
-    from tkinter import font as tkFont
+from .tkimport import *
 
 from ..Settings import FONT
 from .AppFunctions import index as get_index
@@ -21,7 +16,8 @@ class TextPrompt:
 
         # TODO // sort out the name space to check for suggestions
 
-        keywords = list(self.root.namespace["get_keywords"]())
+        # keywords = list(self.root.namespace["get_keywords"]())
+        keywords = list(get_keywords())
         synthdefs = list(self.root.namespace["SynthDefs"])
         attributes = list(self.root.namespace["Player"].get_attributes())
         player_methods = ["every", "often", "sometimes", "rarely"]

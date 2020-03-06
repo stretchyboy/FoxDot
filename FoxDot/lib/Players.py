@@ -321,6 +321,7 @@ class Player(Repeatable):
         self.attr  = {}
         self.modifier = Pattern()
         self.mod_data = 0
+        self.filename = None
 
         # Keyword arguments that are used internally
 
@@ -397,52 +398,51 @@ class Player(Repeatable):
 
         return self
 
-    def test_for_circular_reference(self, attr, value, last_parent=None, last_key=None):
+    def test_for_circular_reference(self, value, attr, last_player=None, last_attr=None):
         """ Used to raise an exception if a player's attribute refers to itself e.g. `p1 >> pads(dur=p1.dur)` """
 
-        # If we are setting a group of values, check each one in turn
+        # We are setting self.attr to value, check if value depends on self.attr
 
         if isinstance(value, PGroup):
-            
+
             for item in value:
-            
-                self.test_for_circular_reference(attr, item, last_parent,  last_key)
+
+                self.test_for_circular_reference(item, attr, last_player, last_attr)
 
         elif isinstance(value, PlayerKey):
-          
-            # If the original Player is *this* player and we are referencing the same attr, throw and exception
-         
-            if value.parent is self and attr == value.key:
 
-                ident_self  = "{}.{}".format(self.id if self.id is not None else str(self), attr)
-                
-                if last_parent is not None:
-                    
-                    ident_other = "{}.{}".format(last_parent.id if last_parent.id is not None else str(last_parent), last_key)
-                
+            # If the Player key relies on this player.attr, raise error
+
+            if value.cmp(self, attr):
+
+                ident_self = value.name()
+
+                if last_player is not None:
+
+                    ident_other = "{}.{}".format(last_player.id, last_attr)
+
                 else:
-                
+
                     ident_other = ident_self
 
                 err = "Circular reference found: {} to itself via {}".format(ident_self, ident_other)
-                
-                raise ValueError(err)
-            
-            # If we get the same parent and key, stop
 
-            elif last_parent == value.parent and last_key == value.key:
-            
+                raise ValueError(err)
+
+            elif last_player == value.player and last_attr == value.attr:
+
                 return
-            
+
             else:
 
-                # Check if other values in the parent might have a circular reference e.g. p1 >> pads([0,1,p2.degree])
+                # Go through the player key's 
+
+                for item in value.get_player_attribute():
             
-                for item in value.parent.attr[value.key]:
-            
-                    self.test_for_circular_reference(attr, item, last_parent=value.parent, last_key=value.key)
+                    self.test_for_circular_reference(item, attr, value.player, value.attr)
+
         return
-       
+
     def __setattr__(self, name, value):
 
         # Possibly replace with slots?
@@ -459,11 +459,11 @@ class Player(Repeatable):
 
                 value = asStream(value)
 
-                for item in value: # maybe use a deepiter method
+                for item in value:
 
-                    self.test_for_circular_reference(name, item)
+                    self.test_for_circular_reference(item, name)
 
-                # Update the attribute dict
+                # Update the attribute dict if no error
                 
                 self.attr[name] = value
 
@@ -664,11 +664,16 @@ class Player(Repeatable):
         self.get_event() 
 
         # Play the note
-
-        # if type(self.event['dur']) != rest:
-        if not isinstance(self.event["dur"], rest):
         
-            self.send(verbose=(self.metro.solo == self and kwargs.get('verbose', True)))
+        if not isinstance(self.event["dur"], rest):
+
+            try:
+        
+                self.send(verbose=(self.metro.solo == self and kwargs.get('verbose', True)))
+
+            except Exception as err:
+
+                print("Error in Player {}: {}".format(self.id, err))
         
         # If using custom bpm
 
@@ -686,7 +691,7 @@ class Player(Repeatable):
 
             dur *= tempo_shift
 
-        # Schedule the next event
+        # Schedule the next event (could move before get_event and use the index for get_event)
 
         self.event_index = self.event_index + dur
 
@@ -793,6 +798,11 @@ class Player(Repeatable):
 
         # Make sure all values are reset to start
 
+        if "filename" in kwargs:
+
+            self.filename = kwargs["filename"]
+            del kwargs["filename"]
+
         if self.isplaying is False:
 
             self.reset() 
@@ -870,7 +880,15 @@ class Player(Repeatable):
 
             # If we want to update now, set the start point to now
 
-            if kwargs.get("quantise", True) == False:
+            after = True
+
+            if self.metro.now_flag:
+
+                start_point = self.metro.now()
+
+                after = False
+
+            elif kwargs.get("quantise", True) == False:
 
                 start_point = self.metro.now()
 
@@ -880,7 +898,7 @@ class Player(Repeatable):
 
             self.event_n = 0
 
-            self.event_n, self.event_index = self.count(start_point, event_after=True)
+            self.event_n, self.event_index = self.count(start_point, event_after=after)
 
             self.metro.schedule(self, self.event_index)
 
@@ -933,7 +951,19 @@ class Player(Repeatable):
 
                 if key in kwargs:
 
-                    new_event[key] = self.unpack(PGroup(kwargs[key]))
+                    item = kwargs[key]
+
+                    if isinstance(item, PGroupPrime):
+
+                        new_event[key] = self.unpack(item)
+
+                    elif isinstance(item, PGroup):
+
+                        new_event[key] = self.unpack(PGroup([item]))
+
+                    else:
+
+                        new_event[key] = self.unpack(PGroup(item))
 
                 elif len(attributes[key]) > 0:
 
@@ -943,9 +973,11 @@ class Player(Repeatable):
 
             dur = float(kwargs.get("dur", new_event["dur"])) / n
 
+            new_event["dur"] = dur
+
             # Get PGroup delays
 
-            new_event["delay"] = PGroup([PGroup([dur * (i+1) for i in range(n-1)]) for x in range(self.get_event_length(new_event))])
+            new_event["delay"] = PGroup([dur * (i+1) for i in range(max(n, self.get_event_length(new_event)))])
 
             new_event = self.get_prime_funcs(new_event)
 
@@ -1004,6 +1036,38 @@ class Player(Repeatable):
             self.pshift=0
         return self
 
+    def unison(self, unison=2, detune=0.125):
+        """ Like spread(), but can specify number of voices(unison)  
+        Sets pan to (-1,-0.5,..,0.5,1) and pshift to (-0.125,-0.0625,...,0.0625,0.125)
+        If unison is odd, an unchanged voice is added in the center
+        Eg : p1.unison(4, 0.5) => pshift=(-0.5,-0.25,0.25,0.5), pan=(-1.0,-0.5,0.5,1.0)
+             p1.unison(5, 0.8) => pshift=(-0.8,-0.4,0,0.4,0.8), pan=(-1.0,-0.5,0,0.5,1.0)
+        """
+        if unison != 0:
+            pan=[]
+            pshift=[]
+            uni = int(unison if unison%2==0 else unison-1)
+            for i in range(1,int(uni/2)+1):
+                pan.append(2*i/uni)
+                pan.insert(0, -2*i/uni)
+            for i in range(1, int(uni/2)+1):
+                pshift.append(detune*(i/(uni/2)))
+                pshift.insert(0,detune*-(i/(uni/2)))
+            if unison%2!=0 and unison > 1:
+                pan.insert(int(len(pan)/2), 0)
+                pshift.insert(int(len(pan)/2), 0)              
+            self.pan = tuple(pan)
+            self.pshift = tuple(pshift)
+        else:
+            self.pan=0
+            self.pshift=0
+        return self
+
+    def seconds(self):
+        """ Sets the player bpm to 60 so duration will be measured in seconds """
+        self.bpm=60
+        return self
+    
     def slider(self, start=0, on=1):
         """ Creates a glissando effect between notes """
         if on:
@@ -1194,7 +1258,7 @@ class Player(Repeatable):
         """
         if (key not in self.__dict__) or (not isinstance(self.__dict__[key], PlayerKey)):
 
-            self.__dict__[key] = PlayerKey(value, parent=self, attr=key) 
+            self.__dict__[key] = PlayerKey(value, player=self, attr=key) 
 
         else:
 
@@ -1297,7 +1361,7 @@ class Player(Repeatable):
 
         if item.parent is self:
 
-            self.update_player_key(item.key, self.now(item.key), 0)
+            self.update_player_key(item.attr, self.now(item.attr), 0)
 
         # If the parent is in the same queue block, make sure its values are up-to-date
 
@@ -1307,7 +1371,7 @@ class Player(Repeatable):
 
             try:
 
-                queue_item = self.queue_block[item.parent]
+                queue_item = self.queue_block[item.player]
 
             except KeyError:
 
@@ -1317,7 +1381,7 @@ class Player(Repeatable):
 
             if queue_item is not None and queue_item.called is False:
                     
-                item.parent.update_player_key(item.key, item.parent.now(item.key), 0)
+                item.player.update_player_key(item.attr, item.player.now(item.attr), 0)
 
         return item.now()
 
@@ -1456,7 +1520,7 @@ class Player(Repeatable):
 
                 if len(event['sus']) > 1:
 
-                    min_sus = min(event['sus'])
+                    min_sus = min(event['sus']) if min(event['sus']) else 1
 
                     offset = PGroup([(sus / min_sus) for sus in event["sus"]])
 
@@ -1573,7 +1637,7 @@ class Player(Repeatable):
 
         # Only send if amp > 0 etc
 
-        if verbose and (message["amp"] > 0) and ((self.synthdef != SamplePlayer) or (self.synthdef == SamplePlayer and message["buf"] > 0)):
+        if verbose and (message["amp"] > 0) and ((self.synthdef != SamplePlayer and message["freq"] != None) or (self.synthdef == SamplePlayer and message["buf"] > 0)):
 
             # Need to send delay and synthdef separately
 
@@ -1585,7 +1649,7 @@ class Player(Repeatable):
 
             # We can set a condition to only send messages
 
-            self.queue_block.osc_messages.append(compiled_msg)
+            self.queue_block.append_osc_message(compiled_msg)
 
             # self.do_bang = True
 
@@ -1675,8 +1739,14 @@ class Player(Repeatable):
 
             scale  = kwargs.get("scale", self.scale)
 
-            freq, midinote = get_freq_and_midi(degree, octave, root, scale)
-            
+            if degree == None:
+
+                freq, midinote = None, None
+
+            else:
+
+                freq, midinote = get_freq_and_midi(degree, octave, root, scale)
+                
             message.update({'freq':  freq, 'midinote': midinote})
 
             # Updater player key
@@ -1798,6 +1868,33 @@ class Player(Repeatable):
 
         return self
 
+    def versus(self, other_key, rule=lambda x, y: x > y, attr=None):
+        """ Sets the 'amplify' key for both players to be dependent on the comparison of keys """
+
+        # Get reference to the second player object
+
+        other = other_key.player
+
+        # Get the attribute from the key to versus
+
+        this_key = getattr(self, other_key.attr if attr is None else attr)
+
+        # Set amplifications based on the rule
+
+        self.amplify  = this_key.transform(lambda value: rule(value, other_key.now()))
+        other.amplify = this_key.transform(lambda value: not rule(value, other_key.now()))
+
+        return self
+
+    def reload(self):
+        """ If this is a 'play' or 'loop' SynthDef, reload the filename used"""
+
+        if self.synthdef == LoopPlayer:
+
+            Samples.reload(self.filename)
+
+        return self
+
     def only(self):
         """ Stops all players except this one """
         for player in list(self.metro.playing):
@@ -1842,12 +1939,12 @@ class Player(Repeatable):
             self._versus = None
         return self
 
-    def versus(self, other, func = lambda a, b: a > b):
+    # def versus(self, other, func = lambda a, b: a > b):
 
-        self.amp  = self.pitch > other.pitch
-        other.amp = other.pitch > self.pitch
+    #     self.amp  = self.pitch > other.pitch
+    #     other.amp = other.pitch > self.pitch
 
-        return self
+    #     return self
     
 
     # Utils
@@ -1910,8 +2007,8 @@ class Player(Repeatable):
     def offbeat(self, dur=1):
         """ Off sets the next event occurence """
 
-        self.dur = dur
-        self.delay = dur / 2
+        self.dur = abs(dur)
+        self.delay = abs(dur) / 2
 
         return self
 
@@ -2025,14 +2122,14 @@ class Group:
                     setattr(p, name, value)
                 except:
                     WarningMsg("'%s' object has no attribute '%s'" % (str(p), name))
-        except:
+        except KeyError :
             self.__dict__[name] = value 
         return self        
 
     def __getattr__(self, name):
         """ Returns a Pattern object containing the desired attribute for each player in the group  """
         if name == "players":
-            return self.players
+            return self.__dict__["players"]
         attributes = GroupAttr()
         for player in self.players:
             if hasattr(player, name):

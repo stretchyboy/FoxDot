@@ -62,11 +62,11 @@
 from __future__ import absolute_import, division, print_function
 
 import os.path
-from .Settings import EFFECTS_DIR, SC3_PLUGINS
-from .ServerManager import DefaultServer
+from ..Settings import EFFECTS_DIR, SC3_PLUGINS
+from ..ServerManager import Server
 
 class Effect:
-    server=DefaultServer
+    server=Server
     def __init__(self, foxdot_name, synthdef, args={}, control=False):
 
         self.name      = foxdot_name
@@ -89,7 +89,10 @@ class Effect:
         cls.server = server
     
     def __repr__(self):
-        return "<Fx '{}' -- args: {}>".format(self.synthdef, ", ".join(self.args))
+        # return "<Fx '{}' -- args: {}>".format(self.synthdef, ", ".join(self.args))
+        other_args = ['{}'.format(arg) for arg in self.args if arg != self.name]
+        other_args = ", other args={}".format(other_args) if other_args else ""
+        return "<'{}': keyword='{}'{}>".format(self.synthdef, self.name, other_args)
 
     def __str__(self):
         s  = "SynthDef.new(\{},\n".format(self.synthdef)
@@ -152,11 +155,13 @@ class Effect:
                 print("IOError: Unable to update '{}' effect.".format(self.synthdef))
 
         # 3. Send to server
-        
+
+        self.load()
+
+    def load(self):
+        """ Load the Effect """
         if self.server is not None:
-
             self.server.loadSynthDef(self.filename)
-
         return
 
 class In(Effect):
@@ -198,6 +203,13 @@ class EffectManager(dict):
     def __repr__(self):
         return "\n".join([repr(value) for value in self.values()])
 
+    def values(self):
+        return [self[key] for key in self.sort_by("synthdef")]
+
+    def sort_by(self, attr):
+        """ Returns the keys sorted by attribute name"""
+        return sorted(self.keys(), key=lambda effect: getattr(self[effect], attr))
+
     def new(self, foxdot_arg_name, synthdef, args, order=2):
         self[foxdot_arg_name] = Effect(foxdot_arg_name, synthdef, args, order==0)
 
@@ -234,8 +246,15 @@ class EffectManager(dict):
         return tuple(self.all_kw)
 
     def __iter__(self):
-        for key in self.pre_kw + self.kw:
+        for key in self.kw:
             yield key, self[key]
+
+    def reload(self):
+        """ Re-sends each effect to SC """
+        for kw, effect in self:
+            effect.load()
+        In(); Out();
+        return
 
 
 # -- TODO
@@ -247,6 +266,8 @@ class EffectManager(dict):
 # 3. After envelope
 
 FxList = EffectManager()
+
+Effects = FxList # Alias - to become default
 
 # Frequency Effects
 
@@ -262,8 +283,8 @@ fx = FxList.new("slidefrom", "slideFrom", {"slidefrom": 0, "sus": 1, "slidedelay
 fx.add("osc = osc * EnvGen.ar(Env([slidefrom + 1, slidefrom + 1, 1], [sus*slidedelay, sus*(1-slidedelay)]))")
 fx.save()
 
-fx = FxList.new("glide", "glissando", {"glide": 0, "glide_delay": 0.5, "sus": 1}, order=0)
-fx.add("osc = osc * EnvGen.ar(Env([1, 1, (1.059463**glide)], [sus*glide_delay, sus*(1-glide_delay)]))")
+fx = FxList.new("glide", "glissando", {"glide": 0, "glidedelay": 0.5, "sus": 1}, order=0)
+fx.add("osc = osc * EnvGen.ar(Env([1, 1, (1.059463**glide)], [sus*glidedelay, sus*(1-glidedelay)]))")
 fx.save()
 
 fx = FxList.new("bend", "pitchBend", {"bend": 0, "sus": 1, "benddelay": 0}, order=0)
@@ -275,7 +296,9 @@ fx.add("osc = osc * LFPulse.ar(coarse / sus)")
 fx.save()
 
 fx = FxList.new("striate", "striate", {"striate": 0, "sus": 1, "buf": 0, "rate": 1}, order=0)
-fx.add("osc = osc * LFPulse.ar(striate / sus, width:  (BufDur.kr(buf) / rate) / sus)")
+fx.add("rate = (BufDur.kr(buf) / sus)")
+fx.add("rate = Select.kr(rate > 1, [1, rate])")
+fx.add("osc = osc * LFPulse.ar(striate / sus, width:  (BufDur.kr(buf) / rate) / sus) * rate")
 fx.save()
 
 fx = FxList.new("pshift", "pitchShift", {"pshift":0}, order=0)

@@ -176,7 +176,7 @@ def PStutter(x, n=2):
 
 @loop_pattern_func
 def PSq(a=1, b=2, c=3):
-    ''' Returns a Pattern '''
+    ''' Returns a Pattern of square numbers in the range a to a+c '''
     return Pattern([x**b for x in range(a,a+c)])
 
 @loop_pattern_func
@@ -217,17 +217,30 @@ def PSum(n, total, **kwargs):
     return Pattern(data)
 
 @loop_pattern_func
-def PRange(start, stop=None, step=None):
+def PRange(start, stop=None, step=1):
     """ Returns a Pattern equivalent to ``Pattern(range(start, stop, step))`` """
-    return Pattern(list(range(*[val for val in (start, stop, step) if val is not None])))
+    if stop is None:
+        
+        start, stop = 0, start
+
+    if start == stop:
+
+        return Pattern(start)
+    
+    if (start > stop and step > 0) or (start < stop and step < 0):
+    
+        step = step*-1
+
+    return Pattern(list(range(start, stop, step)))
 
 @loop_pattern_func
-def PTri(start, stop=None, step=None):
+def PTri(start, stop=None, step=1):
     """ Returns a Pattern equivalent to ``Pattern(range(start, stop, step))`` with its reversed form
     appended."""
-    rev_step = step if step is not None else 1
-    data = list(PRange(start, stop, step))
-    return Pattern(data + [item + rev_step for item in reversed(data)])
+    if stop is None: 
+        start, stop = 0, start
+    pat = PRange(start, stop, step)
+    return pat | pat.reverse()[1:-1]
 
 @loop_pattern_func
 def PSine(n=16):

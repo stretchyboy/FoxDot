@@ -1,41 +1,30 @@
-FoxDot - Live Coding with Python v0.7
+FoxDot - Live Coding with Python v0.8
 =====================================
+
+## Please note
+
+I will not be actively maintaining FoxDot until January 2020 and will not be making changes to the code in response to issues / pull requests in this time. However, you can still ask questions on the [TOPLAP FoxDot Forum](https://forum.toplap.org/c/communities/foxdot) and I will get back to you when I can. Please do not ask general questions in the "issues" section. Thanks.
+
+---
 
 FoxDot is a Python programming environment that provides a fast and user-friendly abstraction to SuperCollider. It also comes with its own IDE, which means it can be used straight out of the box; all you need is Python and SuperCollider and you're ready to go!
 
-### v0.7 fixes and updates
-- Added startup file that loads on boot. Found in `path/to/FoxDot/lib/Custom/startup.py`. To use another startup file, you can run FoxDot with a `--startup` flag like so:
+## Important
 
-```bash
-$ python -m FoxDot --startup path/to/my_startup.py
+If you are having trouble installing using `pip install FoxDot`, try updating Python's `setuptools` and `wheel` libraries using the following code and trying again.
+
+```
+pip install -U setuptools
+pip install -U wheel
 ```
 
-- Fix `MidiIn` missing Synth bug
-- Improved clock timing. If the user is not using a `var` for the tempo, it will be far more accurate and synchronising with other FoxDot instances will be less likely to drift out of time. Also added the function to sync with instances of [EspGrid](https://github.com/d0kt0r0/EspGrid) by simply using `Clock.sync_to_espgrid()` (experimental).
-- Added `Go()` function to run FoxDot code from within normal Python programs.
-- Added `inf` variable, which can be used as a duration in any `var` object to continually use a value once it has been reached e.g. `var([0,1],[4,inf])`. This can be combined usefully with a special `var` object called `now` which starts the timing cycle for a `var` at the current time in the clock:
+### v0.8 Updates
+
+- Added `stretch` synth for timestretching samples, similar to `loop` but better and only plays the whole file. Stretches the audio's duration to the `sus` attribute without affecting pitch and does not require the tempo to be known.
 
 ```python
-d1 >> play("x-o-", amp=linvar([0,1],[8,inf], start=now))
-```
-
-- (Experimental) Added `Cycle` pattern type, which can be used in conjunction with `every` to more effectively iterate over different values used for different calls to the same method. For example, you spread `stutter` over 3 beats in one call, then 2 beats in the other, you would have to use a `var` like so:
-
-```python
-d1 >> play("x-o-").every(4, "stutter", dur=var([3,2],4))
-```
-
-This became problematic when introducting `sometimes` as you would not know the frequency of the call in advance. Now you can just use `Cycle` which will be converted to a `var` with appropriate timing values when used with `every`. Any other use of `Cycle` will be treated as a regular `Pattern` object. Example of how to use `Cycle`:
-
-```python
-d1 >> play("x-o-").sometimes("stutter", dur=Cycle([2,3]))
-```
-
-- Fix `Pattern.offlayer` which is similar to `offadd` but requires a second argument specifying a method apply to the second layer as a string *then* the duration to delay the layer before specifying the arguments and keyword arguments to be supplied to the given methods. E.g.
-
-```python
-# Layer with the pattern trimmed to length 3 with a delay of 0.75 beats
-P[0, 1, 2, 3].offlayer("trim", 0.75, 3)
+# Stretches the audio to 4 beats without affecting pitch
+p1 >> stretch("Basic_Rock_135", dur=4)
 ```
 
 ---
@@ -75,7 +64,7 @@ Quarks.install("FoxDot")
 
 #### Installing with SuperCollider 3.7 or earlier
 
-If you are having trouble installing the FoxDot Quark in SuperCollider, it’s usually because the version of SuperCollider you are installing doesn’t have the functionality for installing Quarks or it doesn’t work properly. If this is the case, you can download the contents of the following SuperCollider script: [foxdot.scd](http://foxdot.org/wp-content/uploads/foxdot.scd). Once downloaded, open the file in SuperCollider and press Ctrl+Return to run it. This will make SuperCollider start listening for messages from FoxDot.
+If you are having trouble installing the FoxDot Quark in SuperCollider, it is usually because the version of SuperCollider you are installing doesn’t have the functionality for installing Quarks or it doesn’t work properly. If this is the case, you can download the contents of the following SuperCollider script: [foxdot.scd](http://foxdot.org/wp-content/uploads/foxdot.scd). Once downloaded, open the file in SuperCollider and press Ctrl+Return to run it. This will make SuperCollider start listening for messages from FoxDot.
 
 #### Frequently Asked Questions
 
@@ -184,7 +173,7 @@ bd >> play("x-o-[xx]-o(-[oo])").every([6,2], 'mirror').every(8, 'shuffle')
 
 ## Documentation
 
-[Link to documentation website](https://docs.foxdot.org/) (still in progress)
+[Link to documentation website](https://foxdot.org/docs/) (still in progress)
 
 ## Using alternative editors
 
@@ -221,4 +210,4 @@ FoxDot's audio files have been obtained from a number of sources but I've lost r
 - Many samples have been obtained from http://freesound.org and have been placed in the public domain via the Creative Commons 0 License: http://creativecommons.org/publicdomain/zero/1.0/ - thank you to the original creators
 - Other samples have come from the [Dirt Sample Engine](https://github.com/tidalcycles/Dirt-Samples/tree/c2db9a0dc4ffb911febc613cdb9726cae5175223) which is part of the TidalCycles live coding language created by Yaxu - another huge amount of thanks.
 
-If you feel I've used a sample where I shouldn't have, please get it touch!
+If you feel I've used a sample where I shouldn't have, please get in touch!

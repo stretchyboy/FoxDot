@@ -109,9 +109,13 @@ ALPHA_VALUE               = conf.ALPHA_VALUE
 MENU_ON_STARTUP           = conf.MENU_ON_STARTUP
 TRANSPARENT_ON_STARTUP    = conf.TRANSPARENT_ON_STARTUP
 RECOVER_WORK              = conf.RECOVER_WORK
+CHECK_FOR_UPDATE          = conf.CHECK_FOR_UPDATE
 LINE_NUMBER_MARKER_OFFSET = conf.LINE_NUMBER_MARKER_OFFSET
+AUTO_COMPLETE_BRACKETS    = conf.AUTO_COMPLETE_BRACKETS
 CPU_USAGE                 = conf.CPU_USAGE
 CLOCK_LATENCY             = conf.CLOCK_LATENCY
+FORWARD_ADDRESS           = conf.FORWARD_ADDRESS
+FORWARD_PORT              = conf.FORWARD_PORT
 
 if conf.SAMPLES_DIR is not None and conf.SAMPLES_DIR != "":
 
@@ -124,14 +128,14 @@ def get_timestamp():
 # Name of SamplePlayer and LoopPlayer SynthDef
 
 class _SamplePlayer:
-    names = ('play1', 'play2')
+    names = ('play1', 'play2',)
     def __eq__(self, other):
         return other in self.names
     def __ne__(self, other):
         return other not in self.names
 
 class _LoopPlayer:
-    names = ("loop", "gsynth")
+    names = ("loop", "gsynth", 'stretch')
     def __eq__(self, other):
         return other in self.names
     def __ne__(self, other):

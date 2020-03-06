@@ -553,6 +553,8 @@ class Pvar(TimeVar):
 
                 if self.dependency is None:
 
+                    print(len(self.values))
+
                     new_values = [getattr(pat, attr)(*args, **kwargs) for pat in self.values]
 
                     return Pvar(new_values, dur=self.dur)
@@ -572,6 +574,10 @@ class Pvar(TimeVar):
         else:
 
             return pattern_attr
+
+    def getitem(self, index, *args, **kwargs):
+        """ Returns a TimeVar based on getting the index of this Pattern """
+        return TimeVar(0).transform(lambda e: self.now().getitem(index))
 
     def __getattr__(self, attr):
         """ (Python 2 compatability) Override for accessing pattern methods. Returns a new
@@ -714,7 +720,7 @@ class Pvar(TimeVar):
         """ Returns a Pvar based on a transformation function, as opposed to
             a mathematical operation"""
         new = self.new(self)
-        new.set_eval(func)
+        new.set_eval(lambda a, b: b.transform(func))
         return new
 
 class ChildPvar(Pvar):
@@ -864,7 +870,11 @@ class _var_dict(object):
         if name in self.__vars:
             value = self.__vars[name]
         else:
-            value = object.__getattr__(self, name)
+            try:
+                value = object.__getattr__(self, name)
+            except AttributeError:
+                err = NameError("'var.{}' does not exist.".format(name))
+                raise err
         return value
 
 var = _var_dict()

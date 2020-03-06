@@ -1,9 +1,7 @@
 from __future__ import absolute_import, division, print_function
 
-try:
-    import Tkinter as Tk
-except ImportError:
-    import tkinter as Tk
+
+from . import tkimport as Tk
 
 from ..Settings import LINE_NUMBER_MARKER_OFFSET
 from ..Code import execute
@@ -13,7 +11,6 @@ class LineNumbers(Tk.Canvas):
         Tk.Canvas.__init__(self, *args, **kwargs)
         self.root = master
         self.textwidget = master.text
-        self.redraw()
 
     def redraw(self, *args):
         '''redraw line numbers'''
@@ -62,5 +59,9 @@ class LineNumbers(Tk.Canvas):
                              fill="#c9c9c9")
 
             i = self.textwidget.index("{}+1line".format(i))
+
+        # Update console beat counter here too
+
+        self.root.console.counter.redraw()
 
         self.after(30, self.redraw)
