@@ -38,10 +38,10 @@ class Tone(db.Entity):
 
     #cache the FoxDot best sample ids and player rate for each midi note
     def makeMap(self):
-        map = []
-        for midi in range(120):
+        map = {}
+        for midi in range(0,120):
             #loop around samples
-            lowscore = 100000000
+            lowscore = 1000000000
             lowsample = None
             for s in self.samples:
                 currscore = s.score(midi)
@@ -51,9 +51,9 @@ class Tone(db.Entity):
                     lowsample = s
             if(lowsample):
                 transform = lowsample.getTransform(midi)
-                map.append((lowsample.get_pk(), transform))
+                map[midi] = (lowsample.get_pk(), transform)
             else:
-                map.append((None, None))
+                map[midi] = (None, None)
 
         self.notes_map = map
         samples = []
@@ -77,6 +77,62 @@ class Tone(db.Entity):
 def getFileName(name, sample=0):
     return '{0:03d}_'.format(sample)+name
     #return '{0:03d}_'.format(sample)+("".join(x for x in name if x.isalnum()).lower()) + ".wav"
+
+def getNoteFromFile(filename, samplerate = 44100):
+    from aubio import source, pitch, midi2note
+    from numpy import mean, array, ma
+
+    downsample = 1
+    win_s = 4096 // downsample # fft size
+    hop_s = 512  // downsample # hop size
+
+    s = source(filename, samplerate, hop_s)
+    samplerate = s.samplerate
+
+    tolerance = 0.8
+
+    pitch_o = pitch("yin", win_s, hop_s, samplerate)
+    pitch_o.set_unit("midi")
+    pitch_o.set_tolerance(tolerance)
+
+    pitches = []
+    confidences = []
+
+    # total number of frames read
+    total_frames = 0
+    while True:
+        samples, read = s()
+        pitch = pitch_o(samples)[0]
+        #pitch = int(round(pitch))
+        confidence = pitch_o.get_confidence()
+        #if confidence < 0.8: pitch = 0.
+        #print("%f %f %f" % (total_frames / float(samplerate), pitch, confidence))
+        pitches += [pitch]
+        confidences += [confidence]
+        total_frames += read
+        if read < hop_s: break
+
+
+
+    #print pitches
+
+    skip = 1
+
+    pitches = array(pitches[skip:])
+    confidences = array(confidences[skip:])
+
+    # plot cleaned up pitches
+    cleaned_pitches = pitches
+    #cleaned_pitches = ma.masked_where(cleaned_pitches < 0, cleaned_pitches)
+    #cleaned_pitches = ma.masked_where(cleaned_pitches > 120, cleaned_pitches)
+    cleaned_pitches = ma.masked_where(confidences < tolerance, cleaned_pitches)
+    cleaned_pitches = ma.masked_where(cleaned_pitches==0, cleaned_pitches)
+    note = int(round(mean(cleaned_pitches.compressed())))
+
+    print(note, midi2note(note))
+
+    return note
+
 
 class Sample(db.Entity):
     id = PrimaryKey(int, auto=True)
@@ -187,6 +243,11 @@ def get_list():
         strs.append(str(t.id) + ": " + t.name)
     return os.linesep.join(strs)
 
+@db_session
+def refresh():
+    for t in select(t for t in Tone):
+        t.makeMap()
+
 
 @db_session
 def get_or_create_tone_from_sample(
@@ -227,6 +288,9 @@ def get_or_create_sample(
         p.octave = octave
         midi = p.midi
 
+    if midi == None:
+        midi = getNoteFromFile(inputfilepath)
+
     if Sample.exists(tone=tone, midi=midi):
         return Sample.get(tone=tone, midi=midi)
 
@@ -261,8 +325,14 @@ def main():
     parser.add_argument('-m','--midi', type=int, nargs='?', default=None,
                         help='Midi number of sample')
 
+
+    '''parser.add_argument('-s','--samplerate', type=int, nargs='?', default=44100,
+                        help='Sample Rate of sample')
+    '''
+
     parser.add_argument('-t','--test', action='store_true', help="Run test suite")
     parser.add_argument('-l','--list', action='store_true', help="List available tones")
+    parser.add_argument('-r','--refresh', action='store_true', help="Regenerate Mapping Data")
 
     # DONE: add -t for test
     # DONE: add -l for list get_or_create_tone_from_sample
@@ -287,18 +357,21 @@ def main():
         with db_session:
             t, s = get_or_create_tone_from_sample(
                 inputfilepath = "/home/meggleton/Downloads/Fingered (bridge pickup) Rickenbacker bass (4001 - 1974)/163021__project16__d-3-pp.wav",
-                notename = "D",
-                octave = 3)
+                #notename = "D",
+                #octave = 3
+                )
 
             t, s = get_or_create_tone_from_sample(
                 inputfilepath = "/home/meggleton/Downloads/Fingered (bridge pickup) Rickenbacker bass (4001 - 1974)/162995__project16__f-3-pp.wav",
-                notename = "F",
-                octave = 3)
+                #notename = "F",
+                #octave = 3
+                )
 
             t, s = get_or_create_tone_from_sample(
                 inputfilepath = "/home/meggleton/Downloads/Fingered (bridge pickup) Rickenbacker bass (4001 - 1974)/162969__project16__a2-pp.wav",
-                notename = "A",
-                octave = 2)
+                #notename = "A",
+                #octave = 2
+                )
 
 
             print("t.getNotePlayInfo(60)", t.getNotePlayInfo(60))
@@ -306,6 +379,8 @@ def main():
     elif(args.list):
         show_list()
 
+    elif(args.refresh):
+        refresh()
 
     else:
         parser.print_usage()

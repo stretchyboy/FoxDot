@@ -480,10 +480,10 @@ class HybridSynthDef(SampleSynthDef):
 
             #Create a map of samples (FoxDot naming convetion compliant)
             # to buffer numbers
-            buffers = []
+            buffers = {}
             for sample in sampleIDs:
                 newBuffer = Samples.loadBuffer(filename, sample);
-                buffers.append(newBuffer)
+                buffers[sample] = newBuffer
             tone.buffers = buffers
 
         kwargs["tone"] = tone

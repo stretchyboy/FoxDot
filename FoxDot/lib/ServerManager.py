@@ -384,7 +384,7 @@ class SCLangServerManager(ServerManager):
 
         for key in packet:
 
-            if key not in ("env", "degree"): # skip some attr
+            if key not in ("env", "degree", "tone"): # skip some attr including hybrids tone
 
                 try:
 

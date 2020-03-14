@@ -1754,10 +1754,17 @@ class Player(Repeatable):
             if (tone != None):
                 #get the sample number (in the db and matched in the folder)
                 #and the playback rate that will map it to the desired note
-                sample, rate = tone.notes_map[int(midinote)]
-                #get the right buffer number for that sample number
-                buf = tone.buffers[sample]
-
+                note = str(int(midinote))
+                if note in tone.notes_map:
+                    sample, rate = tone.notes_map[note]
+                    #get the right buffer number for that sample number
+                    if sample in tone.buffers:
+                        buf = tone.buffers[sample]
+                    else:
+                        print("Buffers for player {} missing {}".format(self.id, sample))
+                        print(tone.buffers)
+                else:
+                    print("Player {} missing {}".format(self.id, note))
             message.update( {'pos': pos, 'buf': buf, 'rate': rate} )
 
         else:
