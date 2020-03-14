@@ -26,7 +26,7 @@ from .Logging import Timing
 from .SCLang import SampleSynthDef
 from .ServerManager import Server
 from .Settings import FOXDOT_SND, FOXDOT_LOOP
-
+from .Extensions import hybriddb
 
 alpha    = "abcdefghijklmnopqrstuvwxyz"
 
@@ -451,6 +451,46 @@ class LoopSynthDef(SampleSynthDef):
         proxy.kwargs["filename"] = filename
         return proxy
 
+
+class HybridSynthDef(SampleSynthDef):
+    # Same as the LoopSynthDef
+    def __init__(self):
+        SampleSynthDef.__init__(self, "hybrid")
+        self.pos = self.new_attr_instance("pos")
+        self.sample = self.new_attr_instance("sample")
+        self.beat_stretch = self.new_attr_instance("beat_stretch")
+        self.defaults['pos']   = 0
+        self.defaults['sample']   = 0
+        self.defaults['beat_stretch'] = 0
+        self.base.append("rate = (rate * (1-(beat_stretch>0))) + ((BufDur.kr(buf) / sus) * (beat_stretch>0));")
+        self.base.append("osc = PlayBuf.ar(2, buf, BufRateScale.kr(buf) * rate, startPos: BufSampleRate.kr(buf) * pos, loop: 1.0);")
+        self.base.append("osc = osc * EnvGen.ar(Env([0,1,1,0],[0.05, sus-0.05, 0.05]));")
+        self.osc = self.osc * self.amp
+        self.add()
+
+    # Adds looking up tones by name and id
+    # and loading all of their samples as buffers for when we need them
+    def __call__(self, tonename, pos=0, sample=0, **kwargs):
+        #print("Buffer tonename", tonename)
+        tone = hybriddb.get_tone(tonename)
+        if (tone != None):
+            #hybriddb gives us a sample folder and sample numbers
+            filename = tone.getFolderPath()
+            sampleIDs = tone.getSampleIDs()
+
+            #Create a map of samples (FoxDot naming convetion compliant)
+            # to buffer numbers
+            buffers = []
+            for sample in sampleIDs:
+                newBuffer = Samples.loadBuffer(filename, sample);
+                buffers.append(newBuffer)
+            tone.buffers = buffers
+
+        kwargs["tone"] = tone
+        proxy = SampleSynthDef.__call__(self, pos, **kwargs)
+        #proxy.kwargs["tone"] = tone
+        return proxy
+
 class StretchSynthDef(SampleSynthDef):
     def __init__(self):
         SampleSynthDef.__init__(self, "stretch")
@@ -480,5 +520,6 @@ class GranularSynthDef(SampleSynthDef):
         return SampleSynthDef.__call__(self, pos, **kwargs)
 
 loop = LoopSynthDef()
+hybrid = HybridSynthDef()
 stretch = StretchSynthDef()
 # gsynth = GranularSynthDef()

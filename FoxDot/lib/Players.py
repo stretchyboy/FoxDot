@@ -131,7 +131,7 @@ from os.path import dirname
 from random import shuffle, choice
 from copy import copy, deepcopy
 
-from .Settings import SamplePlayer, LoopPlayer
+from .Settings import SamplePlayer, LoopPlayer, HybridPlayer
 from .Code import WarningMsg, debug_stdout
 from .SCLang.SynthDef import SynthDefProxy, SynthDef, SynthDefs
 from .Effects import FxList
@@ -150,6 +150,10 @@ from .Scale import midi, miditofreq, get_freq_and_midi
 from .Bang import Bang
 
 from .TimeVar import TimeVar, Pvar
+
+from .Extensions import hybriddb
+HybridDefs = hybriddb.get_list()
+# To print a list of your hybrid synths use print(HybridDefs)
 
 class EmptyPlayer(object):
     """ Place holder for Player objects created at run-time to reduce load time.
@@ -472,7 +476,7 @@ class Player(Repeatable):
                 self.update_pattern_root(name)
 
                 # keep track of what values we change with +-
-
+                # TODO : Hybrid?
                 if (self.synthdef == SamplePlayer and name == "sample") or (self.synthdef != SamplePlayer and name == "degree"):
 
                     self.modifier = value
@@ -1731,6 +1735,31 @@ class Player(Repeatable):
 
             message.update( {'pos': pos, 'buf': buf, 'rate': rate} )
 
+        elif self.synthdef == HybridPlayer:
+            #Get the tone and the note playing stuff
+            tone   = kwargs.get("tone", event["tone"])
+            degree = kwargs.get("degree", event["degree"])
+            octave = kwargs.get("oct", event["oct"])
+            root   = kwargs.get("root", event["root"])
+            scale  = kwargs.get("scale", self.scale)
+
+            if degree == None:
+                freq, midinote = None, None
+            else:
+                freq, midinote = get_freq_and_midi(degree, octave, root, scale)
+
+            pos=0
+            buf = 0
+            # Get a user-specified tempo
+            if (tone != None):
+                #get the sample number (in the db and matched in the folder)
+                #and the playback rate that will map it to the desired note
+                sample, rate = tone.notes_map[int(midinote)]
+                #get the right buffer number for that sample number
+                buf = tone.buffers[sample]
+
+            message.update( {'pos': pos, 'buf': buf, 'rate': rate} )
+
         else:
 
             degree = kwargs.get("degree", event["degree"])
@@ -1888,9 +1917,8 @@ class Player(Repeatable):
 
     def reload(self):
         """ If this is a 'play' or 'loop' SynthDef, reload the filename used"""
-
-        if self.synthdef == LoopPlayer:
-
+        # TODO : does HybridPlayer need to redo the mapping done in the buffere and save it to the tone is that why it dies sometime?
+        if self.synthdef == LoopPlayer :#or self.synthdef == HybridPlayer:
             Samples.reload(self.filename)
 
         return self
