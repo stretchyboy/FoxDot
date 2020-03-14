@@ -115,24 +115,25 @@ def getNoteFromFile(filename, samplerate = 44100):
 
 
     #print pitches
+    try:
+        skip = 1
 
-    skip = 1
+        pitches = array(pitches[skip:])
+        confidences = array(confidences[skip:])
 
-    pitches = array(pitches[skip:])
-    confidences = array(confidences[skip:])
+        # plot cleaned up pitches
+        cleaned_pitches = pitches
+        #cleaned_pitches = ma.masked_where(cleaned_pitches < 0, cleaned_pitches)
+        #cleaned_pitches = ma.masked_where(cleaned_pitches > 120, cleaned_pitches)
+        cleaned_pitches = ma.masked_where(confidences < tolerance, cleaned_pitches)
+        cleaned_pitches = ma.masked_where(cleaned_pitches==0, cleaned_pitches)
+        note = int(round(mean(cleaned_pitches.compressed())))
 
-    # plot cleaned up pitches
-    cleaned_pitches = pitches
-    #cleaned_pitches = ma.masked_where(cleaned_pitches < 0, cleaned_pitches)
-    #cleaned_pitches = ma.masked_where(cleaned_pitches > 120, cleaned_pitches)
-    cleaned_pitches = ma.masked_where(confidences < tolerance, cleaned_pitches)
-    cleaned_pitches = ma.masked_where(cleaned_pitches==0, cleaned_pitches)
-    note = int(round(mean(cleaned_pitches.compressed())))
+        print(note, midi2note(note))
 
-    print(note, midi2note(note))
-
-    return note
-
+        return note
+    except Exception as err:
+        return None
 
 class Sample(db.Entity):
     id      = PrimaryKey(int, auto=True)
@@ -350,14 +351,31 @@ def main():
 
     if(args.path):
         with db_session:
-            t, s = get_or_create_tone_from_sample(
-                inputfilepath = os.path.abspath(args.path),
-                bpm=args.bpm,
-                notename = args.note,
-                octave = args.octave,
-                midi=args.midi,
-                source = args.source,
-            )
+            if os.path.isabs(args.path):
+                for entry in os.listdir(args.path):
+                    fullpath = os.path.join(args.path, entry)
+                    if os.path.isfile(fullpath) and entry.endswith('.wav'):
+                        try:
+                            t, s = get_or_create_tone_from_sample(
+                                inputfilepath = os.path.abspath(fullpath),
+                                bpm=args.bpm,
+                                source = args.source,
+                            )
+                        except Exception as err:
+                            print("Sample "+entry+" could not be added")
+            else :
+                try:
+                    t, s = get_or_create_tone_from_sample(
+                        inputfilepath = os.path.abspath(args.path),
+                        bpm=args.bpm,
+                        notename = args.note,
+                        octave = args.octave,
+                        midi=args.midi,
+                        source = args.source,
+                    )
+                except Exception as err:
+                    print("Sample "+inputfilepath+" could not be added")
+
 
         with db_session:
             print(t.getNotePlayInfo(60))
