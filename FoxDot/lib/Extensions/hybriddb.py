@@ -20,10 +20,10 @@ def getMidiByName(note, oct=4):
     return p1.midi
 
 class Tone(db.Entity):
-    id = PrimaryKey(int, auto=True)
-    name = Required(str)
-    samples = Set('Sample')
-    notes_map = Optional(Json)
+    id          = PrimaryKey(int, auto=True)
+    name        = Required(str)
+    samples     = Set('Sample')
+    notes_map   = Optional(Json)
     samples_map = Optional(Json)
 
     def getFolderPath(self):
@@ -135,16 +135,16 @@ def getNoteFromFile(filename, samplerate = 44100):
 
 
 class Sample(db.Entity):
-    id = PrimaryKey(int, auto=True)
-    name = Required(str)
-    filename = Required(str)
-    sample = Required(int)
-    tone = Required(Tone)
-    length = Optional(int)
-    bpm = Optional(int)
-    midi = Required(int)
-    notes = Set('Note')
-    source = Optional(str)
+    id      = PrimaryKey(int, auto=True)
+    name    = Required(str)
+    filename= Required(str)
+    sample  = Required(int)
+    tone    = Required(Tone)
+    length  = Optional(int)
+    bpm     = Optional(int)
+    midi    = Required(int)
+    notes   = Set('Note')
+    source  = Optional(str)
 
     def score(self, midi):
         densityscore = 0
@@ -162,12 +162,13 @@ class Sample(db.Entity):
         return pitchMidi.frequency / pitchSelf.frequency
 
     def __init__(self,
-        inputfilepath=None,
-        tone=None,
-        bpm = None,
-        midi = None,
-        notename = None,
-        octave = None
+        inputfilepath   = None,
+        tone            = None,
+        bpm             = None,
+        midi            = None,
+        notename        = None,
+        octave          = None,
+        source          = None
      ):
 
         name = os.path.basename(inputfilepath)
@@ -184,12 +185,13 @@ class Sample(db.Entity):
             midi = p.midi
 
         super().__init__(
-            tone = tone,
-            name = name,
-            midi = midi,
-            bpm = bpm,
-            sample=sample,
-            filename=filename
+            tone    = tone,
+            name    = name,
+            midi    = midi,
+            bpm     = bpm,
+            sample  = sample,
+            filename= filename,
+            source  = source,
             )
 
         dir = tone.getFolderPath()
@@ -206,11 +208,11 @@ class Sample(db.Entity):
         self.tone.makeMap()
 
 class Note(db.Entity):
-    id = PrimaryKey(int, auto=True)
-    sample = Required(Sample)
+    id          = PrimaryKey(int, auto=True)
+    sample      = Required(Sample)
     startatbeat = Required(int)
-    endatbeat = Required(int)
-    midi = Required(int)
+    endatbeat   = Required(int)
+    midi        = Required(int)
 
 
 db.generate_mapping(create_tables=True)
@@ -255,7 +257,8 @@ def get_or_create_tone_from_sample(
     bpm = None,
     midi = None,
     notename = None,
-    octave = None):
+    octave = None,
+    source = None):
 
     tonefolderpath = os.path.dirname(inputfilepath)
     tonefolder = os.path.basename(tonefolderpath)
@@ -268,7 +271,8 @@ def get_or_create_tone_from_sample(
         bpm = bpm,
         midi = midi,
         notename = notename,
-        octave = octave)
+        octave = octave,
+        source = source)
 
     #t.makeMap()
 
@@ -281,7 +285,8 @@ def get_or_create_sample(
     bpm = None,
     midi = None,
     notename = None,
-    octave = None):
+    octave = None,
+    source = None):
 
     if(notename and octave):
         p = pitch.Pitch(notename)
@@ -300,7 +305,8 @@ def get_or_create_sample(
         bpm = bpm,
         midi = midi,
         notename = notename,
-        octave = octave)
+        octave = octave,
+        source = source)
 
 def main():
     import argparse
@@ -325,6 +331,8 @@ def main():
     parser.add_argument('-m','--midi', type=int, nargs='?', default=None,
                         help='Midi number of sample')
 
+    parser.add_argument('-s','--source', type=str, nargs='?', default="",
+                        help='Source of sample')
 
     '''parser.add_argument('-s','--samplerate', type=int, nargs='?', default=44100,
                         help='Sample Rate of sample')
@@ -347,7 +355,8 @@ def main():
                 bpm=args.bpm,
                 notename = args.note,
                 octave = args.octave,
-                midi=args.midi
+                midi=args.midi,
+                source = args.source,
             )
 
         with db_session:
@@ -359,18 +368,21 @@ def main():
                 inputfilepath = "/home/meggleton/Downloads/Fingered (bridge pickup) Rickenbacker bass (4001 - 1974)/163021__project16__d-3-pp.wav",
                 #notename = "D",
                 #octave = 3
+                source = "P: by Project16 -- https://freesound.org/people/Project16/packs/10106/"
                 )
 
             t, s = get_or_create_tone_from_sample(
                 inputfilepath = "/home/meggleton/Downloads/Fingered (bridge pickup) Rickenbacker bass (4001 - 1974)/162995__project16__f-3-pp.wav",
                 #notename = "F",
                 #octave = 3
+                source = "P: by Project16 -- https://freesound.org/people/Project16/packs/10106/"
                 )
 
             t, s = get_or_create_tone_from_sample(
                 inputfilepath = "/home/meggleton/Downloads/Fingered (bridge pickup) Rickenbacker bass (4001 - 1974)/162969__project16__a2-pp.wav",
                 #notename = "A",
                 #octave = 2
+                source = "P: by Project16 -- https://freesound.org/people/Project16/packs/10106/"
                 )
 
 
