@@ -182,10 +182,11 @@ class Sample(db.Entity):
         densityscore = 0
         #if the note we have is higher than what we want to play
         #the it is a little bit worse than the lower one at the same distance
-        # TODO : is a frequency based score better?
-        if( self.midi > midi):
-            densityscore = 5
-        return densityscore +(10*abs(self.midi - midi))
+        pitchSelf = pitch.Pitch(midi = self.midi)
+        pitchMidi = pitch.Pitch(midi = midi)
+        if( pitchSelf > pitchMidi):
+            densityscore = 1
+        return densityscore + round(100*pitchMidi.frequency / pitchSelf.frequency)
 
     # the ratio to play the note at to get what we want
     def getTransform(self, midi):
