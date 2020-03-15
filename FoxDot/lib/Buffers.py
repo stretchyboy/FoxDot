@@ -473,6 +473,8 @@ class HybridSynthDef(SampleSynthDef):
     def __call__(self, tonename, pos=0, sample=0, **kwargs):
         #print("Buffer tonename", tonename)
         tone = hybriddb.get_tone(tonename)
+        if(tone == None):
+            WarningMsg("Could not find tone matching %r" % tonename)
         if (tone != None):
             #hybriddb gives us a sample folder and sample numbers
             filename = tone.getFolderPath()

@@ -2,6 +2,8 @@ from pony.orm import *
 from music21 import pitch
 import os
 from shutil import copyfile
+import re
+notefilenamepattern = re.compile("([a-gA-G][\_\-\+\b\#\^]*(10|[0-9]))|((10|[0-9])[a-gA-G][\_\-\+\b\# ]*)")
 
 db = Database()
 #set_sql_debug(True)
@@ -14,10 +16,13 @@ if not os.path.exists(basefolder):
 db.bind(provider='sqlite', filename=os.path.join(basefolder, 'database.sqlite'), create_db=True)
 
 def getMidiByName(note, oct=4):
-    p1 = pitch.Pitch(note)
-    p1.octave = oct
-    #print(p1.midi)
-    return p1.midi
+    fullnote = notename+str(octave)
+    try:
+        p = pitch.Pitch(fullnote)
+        return p.midi
+    except(pitch.AccidentalException, pitch.PitchException) as err:
+        print("Cannot make note from " + fullnote)
+        return None
 
 class Tone(db.Entity):
     id          = PrimaryKey(int, auto=True)
@@ -78,44 +83,46 @@ def getFileName(name, sample=0):
     return '{0:03d}_'.format(sample)+name
     #return '{0:03d}_'.format(sample)+("".join(x for x in name if x.isalnum()).lower()) + ".wav"
 
-def getNoteFromFile(filename, samplerate = 44100):
+
+def getNoteFromWavFile(filename, samplerate = 44100):
     from aubio import source, pitch, midi2note
     from numpy import mean, array, ma
 
-    downsample = 1
-    win_s = 4096 // downsample # fft size
-    hop_s = 512  // downsample # hop size
-
-    s = source(filename, samplerate, hop_s)
-    samplerate = s.samplerate
-
-    tolerance = 0.8
-
-    pitch_o = pitch("yin", win_s, hop_s, samplerate)
-    pitch_o.set_unit("midi")
-    pitch_o.set_tolerance(tolerance)
-
-    pitches = []
-    confidences = []
-
-    # total number of frames read
-    total_frames = 0
-    while True:
-        samples, read = s()
-        pitch = pitch_o(samples)[0]
-        #pitch = int(round(pitch))
-        confidence = pitch_o.get_confidence()
-        #if confidence < 0.8: pitch = 0.
-        #print("%f %f %f" % (total_frames / float(samplerate), pitch, confidence))
-        pitches += [pitch]
-        confidences += [confidence]
-        total_frames += read
-        if read < hop_s: break
-
-
-
-    #print pitches
     try:
+        downsample = 1
+        win_s = 4096 // downsample # fft size
+        hop_s = 512  // downsample # hop size
+
+        s = source(filename, samplerate, hop_s)
+        samplerate = s.samplerate
+
+        tolerance = 0.8
+
+        pitch_o = pitch("yin", win_s, hop_s, samplerate)
+        pitch_o.set_unit("midi")
+        pitch_o.set_tolerance(tolerance)
+
+        pitches = []
+        confidences = []
+
+        # total number of frames read
+        total_frames = 0
+        while True:
+            samples, read = s()
+            pitch = pitch_o(samples)[0]
+            #pitch = int(round(pitch))
+            confidence = pitch_o.get_confidence()
+            #if confidence < 0.8: pitch = 0.
+            #print("%f %f %f" % (total_frames / float(samplerate), pitch, confidence))
+            pitches += [pitch]
+            confidences += [confidence]
+            total_frames += read
+            if read < hop_s: break
+
+
+
+        #print pitches
+
         skip = 1
 
         pitches = array(pitches[skip:])
@@ -132,8 +139,30 @@ def getNoteFromFile(filename, samplerate = 44100):
         print(note, midi2note(note))
 
         return note
-    except Exception as err:
+    except RuntimeError as err:
+        print ("Could not find note from WAV "+ filename)
+        print (err)
         return None
+
+def getNoteFromFileName(filename):
+    #print("getNoteFromFileName", filename)
+    result = notefilenamepattern.search(filename)
+
+    if result == None:
+
+        return None
+    #print("result", result.group(0))
+    fullnote = result.group(0)
+
+    try:
+        p = pitch.Pitch(fullnote)
+        return p.midi
+    except(pitch.AccidentalException, pitch.PitchException) as err:
+        print("Cannot make note from " + fullnote)
+        return None
+
+    return None
+
 
 class Sample(db.Entity):
     id      = PrimaryKey(int, auto=True)
@@ -146,6 +175,8 @@ class Sample(db.Entity):
     midi    = Required(int)
     notes   = Set('Note')
     source  = Optional(str)
+    samplerate= Required(int, default=44100)
+
 
     def score(self, midi):
         densityscore = 0
@@ -169,7 +200,8 @@ class Sample(db.Entity):
         midi            = None,
         notename        = None,
         octave          = None,
-        source          = None
+        source          = None,
+        samplerate      = None
      ):
 
         name = os.path.basename(inputfilepath)
@@ -181,9 +213,7 @@ class Sample(db.Entity):
         #print("filename", filename)
 
         if(notename and octave):
-            p = pitch.Pitch(notename)
-            p.octave = octave
-            midi = p.midi
+            midi = getMidiByName(notename, oct=4)
 
         super().__init__(
             tone    = tone,
@@ -193,6 +223,7 @@ class Sample(db.Entity):
             sample  = sample,
             filename= filename,
             source  = source,
+            samplerate = samplerate
             )
 
         dir = tone.getFolderPath()
@@ -230,6 +261,7 @@ def get_tone(name):
     if(isinstance(name, int)):
         if Tone.exists(id=name):
             return Tone.get(id=name)
+        return None
 
     if Tone.exists(name=name):
         return Tone.get(name=name)
@@ -259,7 +291,9 @@ def get_or_create_tone_from_sample(
     midi = None,
     notename = None,
     octave = None,
-    source = None):
+    source = None,
+    samplerate = 44100,
+    ):
 
     tonefolderpath = os.path.dirname(inputfilepath)
     tonefolder = os.path.basename(tonefolderpath)
@@ -273,7 +307,9 @@ def get_or_create_tone_from_sample(
         midi = midi,
         notename = notename,
         octave = octave,
-        source = source)
+        source = source,
+        samplerate = samplerate,
+        )
 
     #t.makeMap()
 
@@ -287,15 +323,33 @@ def get_or_create_sample(
     midi = None,
     notename = None,
     octave = None,
-    source = None):
+    source = None,
+    samplerate = 44100,
+    ):
 
     if(notename and octave):
-        p = pitch.Pitch(notename)
-        p.octave = octave
-        midi = p.midi
+        midi = getMidiByName(notename, oct=4)
 
     if midi == None:
-        midi = getNoteFromFile(inputfilepath)
+        midi = getNoteFromFileName(inputfilepath)
+
+    if midi == None:
+        midi = getNoteFromWavFile(inputfilepath,samplerate)
+
+    if midi == None:
+        print("Cannot find Note info for "+inputfilepath)
+        fullnote = input("Please enter the Note (A2 c#4 etc.) (empty to skip): ")
+        if fullnote:
+            try:
+                p = pitch.Pitch(fullnote)
+                midi = p.midi
+            except(pitch.AccidentalException, pitch.PitchException) as err:
+                print("Cannot make note from " + fullnote)
+                return None
+
+    if midi == None:
+        raise ValueError("Cannot find Midi Note for "+inputfilepath)
+        return None
 
     if Sample.exists(tone=tone, midi=midi):
         return Sample.get(tone=tone, midi=midi)
@@ -307,7 +361,9 @@ def get_or_create_sample(
         midi = midi,
         notename = notename,
         octave = octave,
-        source = source)
+        source = source,
+        samplerate = samplerate
+        )
 
 def main():
     import argparse
@@ -335,9 +391,11 @@ def main():
     parser.add_argument('-s','--source', type=str, nargs='?', default="",
                         help='Source of sample')
 
-    '''parser.add_argument('-s','--samplerate', type=int, nargs='?', default=44100,
+    parser.add_argument('-e','--samplerate', type=int, nargs='?', default=44100,
                         help='Sample Rate of sample')
-    '''
+
+    parser.add_argument('-d','--delete', type=int, nargs='?', default=None,
+                        help='Delete a Tone')
 
     parser.add_argument('-t','--test', action='store_true', help="Run test suite")
     parser.add_argument('-l','--list', action='store_true', help="List available tones")
@@ -350,35 +408,48 @@ def main():
 
 
     if(args.path):
-        with db_session:
-            if os.path.isabs(args.path):
-                for entry in os.listdir(args.path):
-                    fullpath = os.path.join(args.path, entry)
-                    if os.path.isfile(fullpath) and entry.endswith('.wav'):
+        ourtone=None
+        if os.path.isdir(args.path):
+            for entry in os.listdir(args.path):
+                fullpath = os.path.join(args.path, entry)
+                if os.path.isfile(fullpath) and entry.endswith('.wav'):
+                    with db_session:
                         try:
                             t, s = get_or_create_tone_from_sample(
                                 inputfilepath = os.path.abspath(fullpath),
                                 bpm=args.bpm,
                                 source = args.source,
+                                samplerate = args.samplerate
                             )
-                        except Exception as err:
-                            print("Sample "+entry+" could not be added")
+                            ourtone = t
+                        except ValueError as err:
+                            print (err)
+
             else :
-                try:
-                    t, s = get_or_create_tone_from_sample(
-                        inputfilepath = os.path.abspath(args.path),
-                        bpm=args.bpm,
-                        notename = args.note,
-                        octave = args.octave,
-                        midi=args.midi,
-                        source = args.source,
-                    )
-                except Exception as err:
-                    print("Sample "+inputfilepath+" could not be added")
+                with db_session:
+                    try:
+                        t, s = get_or_create_tone_from_sample(
+                            inputfilepath = os.path.abspath(args.path),
+                            bpm=args.bpm,
+                            notename = args.note,
+                            octave = args.octave,
+                            midi=args.midi,
+                            source = args.source,
+                            samplerate = args.samplerate
+                        )
+                    except ValueError as err:
+                        print (err)
 
+        if(ourtone):
+            with db_session:
+                print(ourtone.getNotePlayInfo(60))
 
+    elif(args.delete):
         with db_session:
-            print(t.getNotePlayInfo(60))
+            t = get_tone(args.delete)
+            t.delete()
+            show_list()
+
 
     elif(args.test):
         with db_session:
