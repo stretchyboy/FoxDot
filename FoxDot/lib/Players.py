@@ -1748,8 +1748,9 @@ class Player(Repeatable):
             else:
                 freq, midinote = get_freq_and_midi(degree, octave, root, scale)
 
-            pos=0
+            pos = 0
             buf = 0
+            rate= 0
             # Get a user-specified tempo
             if (tone != None):
                 #get the sample number (in the db and matched in the folder)
