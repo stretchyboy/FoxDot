@@ -1742,6 +1742,8 @@ class Player(Repeatable):
             octave = kwargs.get("oct", event["oct"])
             root   = kwargs.get("root", event["root"])
             scale  = kwargs.get("scale", self.scale)
+            amp    = kwargs.get("amp", event["amp"])
+            sus    = kwargs.get("sus", event["sus"])
 
             if degree == None:
                 freq, midinote = None, None
@@ -1760,13 +1762,19 @@ class Player(Repeatable):
                     sample, rate = tone.notes_map[note]
                     #get the right buffer number for that sample number
                     if sample in tone.buffers:
+                        # TODO : Check the note won't loop because rate too high
+                        self.metro.beat_dur(sus)
                         buf = tone.buffers[sample]
+                        if(rate<1):
+                            amp = amp / (rate**1.7)
+                        else:
+                            amp = amp * (rate)
                     else:
                         print("Buffers for player {} missing {}".format(self.id, sample))
                         print(tone.buffers)
                 else:
                     print("Player {} missing {}".format(self.id, note))
-            message.update( {'pos': pos, 'buf': buf, 'rate': rate} )
+            message.update( {'pos': pos, 'buf': buf, 'rate': rate, 'amp':amp} )
 
         else:
 
