@@ -44,7 +44,7 @@ class Tone(db.Entity):
     #cache the FoxDot best sample ids and player rate for each midi note
     def makeMap(self):
         map = {}
-        for midi in range(0,120):
+        for midi in range(0,127):
             #loop around samples
             lowscore = 1000000000
             lowsample = None
@@ -52,6 +52,7 @@ class Tone(db.Entity):
                 currscore = s.score(midi)
                 #print("currscore", currscore,lowscore)
                 if(currscore < lowscore):
+                    #print("lower score midi "+str(pitch.Pitch(midi)) +" to sample "+str(pitch.Pitch(s.midi))+ " score "+str(currscore) )
                     lowscore = currscore
                     lowsample = s
             if(lowsample):
@@ -62,9 +63,13 @@ class Tone(db.Entity):
 
         self.notes_map = map
         samples = []
+        samplesAsMidi = []
         for s in self.samples:
             samples.append(s.get_pk())
+            samplesAsMidi.append(s.midi)
         self.samples_map = samples
+        samplesAsMidi.sort()
+        print(self.name, samplesAsMidi)
 
 
     def getClosestSample(self, midi):
@@ -163,6 +168,11 @@ def getNoteFromFileName(filename):
 
     return None
 
+def checkHybrid(toneid):
+    FD.p1 >> FD.hybrid(toneid, FD.P[:8], oct=FD.Pvar(FD.P[4,5,6,2,3],8))
+    inp = input("Does this sound correct? (y/n): ")
+    return (inp.lower() == "y")
+
 
 class Sample(db.Entity):
     id      = PrimaryKey(int, auto=True)
@@ -179,15 +189,27 @@ class Sample(db.Entity):
 
 
     def score(self, midi):
+
         densityscore = 0
+
+        # TODO : is a frequency based score better?
+        if( self.midi > midi):
+            densityscore = 0.6
+        score = (abs(self.midi - midi)**2) + densityscore
+        #print("pitchSelf", str(self.midi),str(pitch.Pitch(self.midi)), "pitchMidi", str(pitch.Pitch(midi)),str(midi), "score", score)
+        return score
+
         #if the note we have is higher than what we want to play
         #the it is a little bit worse than the lower one at the same distance
         pitchSelf = pitch.Pitch(midi = self.midi)
         pitchMidi = pitch.Pitch(midi = midi)
-        if( pitchSelf > pitchMidi):
-            densityscore = 1
-        return densityscore + round(100*pitchMidi.frequency / pitchSelf.frequency)
+        higher = max(pitchMidi.frequency, pitchSelf.frequency)
+        lower = min(pitchMidi.frequency, pitchSelf.frequency)
 
+        return ((higher - lower) / lower) ** 2
+        score = densityscore + abs(round(pitchMidi.frequency - pitchSelf.frequency))
+        #print("pitchSelf", pitchSelf, "pitchMidi", pitchMidi, score)
+        return score
     # the ratio to play the note at to get what we want
     def getTransform(self, midi):
         pitchSelf = pitch.Pitch(midi = self.midi)
@@ -230,6 +252,8 @@ class Sample(db.Entity):
         dir = tone.getFolderPath()
         path = os.path.join(dir, filename)
         copyfile(inputfilepath, path)
+        loadedPitch = pitch.Pitch(midi)
+        print("Added " + self.name + " to "+tone.name+" as "+ str(loadedPitch) )
 
     def after_delete(self):
         self.tone.makeMap()
@@ -313,6 +337,9 @@ def get_or_create_tone_from_sample(
         )
 
     #t.makeMap()
+    commit()
+    if(checkHybrid(t.id) == False):
+        s.delete()
 
     return t,s
 
@@ -333,20 +360,32 @@ def get_or_create_sample(
 
     if midi == None:
         midi = getNoteFromFileName(inputfilepath)
+        if(midi):
+            sane = input(os.path.basename(inputfilepath)+" parsed as "+str(pitch.Pitch(midi))+ "/" +str(midi) + " does this make sense (y/n)? ")
+            if(sane.lower() != "y"):
+                midi = None
 
     if midi == None:
         midi = getNoteFromWavFile(inputfilepath,samplerate)
+        if(midi):
+            sane = input(os.path.basename(inputfilepath)+" detected as "+str(pitch.Pitch(midi))+ "/" +str(midi) + " does this make sense (y/n)? ")
+            if(sane.lower() != "y"):
+                midi = None
+
 
     if midi == None:
         print("Cannot find Note info for "+inputfilepath)
-        fullnote = input("Please enter the Note (A2 c#4 etc.) (empty to skip): ")
+        fullnote = input("Please enter the Note (A2 c#4 etc. or midi number) (empty to skip): ")
         if fullnote:
-            try:
-                p = pitch.Pitch(fullnote)
-                midi = p.midi
-            except(pitch.AccidentalException, pitch.PitchException) as err:
-                print("Cannot make note from " + fullnote)
-                return None
+            if(fullnote.isnumeric()):
+                midi = int(fullnote)
+            else:
+                try:
+                    p = pitch.Pitch(fullnote)
+                    midi = p.midi
+                except(pitch.AccidentalException, pitch.PitchException) as err:
+                    print("Cannot make note from " + fullnote)
+                    return None
 
     if midi == None:
         raise ValueError("Cannot find Midi Note for "+inputfilepath)
@@ -366,7 +405,7 @@ def get_or_create_sample(
         samplerate = samplerate
         )
 
-def main():
+def hybrid_main():
     import argparse
 
     parser = argparse.ArgumentParser(
@@ -438,6 +477,7 @@ def main():
                             source = args.source,
                             samplerate = args.samplerate
                         )
+                        ourtone = t
                     except ValueError as err:
                         print (err)
 
@@ -488,4 +528,6 @@ def main():
         parser.print_usage()
 
 if __name__ == "__main__":
-    main()
+    import FoxDot as FD
+    FD.Scale.default_scale = FD.Scale.major
+    hybrid_main()
